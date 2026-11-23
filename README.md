@@ -1,15 +1,17 @@
 # California Crop Acreage: Trends and Regression Diagnostics
 
-**Fredrick Osei · STAT 601 Practicum, Parts 1 & 2 · Iowa State University**
+**Fredrick Osei · STAT 601 Practicum, Parts 1–3 · Iowa State University**
 
-An R course project examining annual California fruit and vegetable acreage from **1960–2008**. The analysis fits simple linear regressions, examines residual diagnostics, and discusses why a strong overall fit can still miss important patterns in the data.
+A three-part R course project examining annual California crop acreage from **1960–2008**: linear trend diagnostics, nonlinear and AR(1) models, and compositional modeling of crop proportions.
 
-**[Part 1 report](STAT_601.pdf)** · **[Part 2: nonlinear trends and AR(1) models](part2/README.md)** · **[Part 2 report](part2/STAT_601_Part2.pdf)**
+**[Part 1 report](STAT_601.pdf)** · **[Part 2: nonlinear trends and AR(1) models](part2/README.md)** · **[Part 2 report](part2/STAT_601_Part2.pdf)** · **[Part 3 report](part3/STAT_601_Part3.pdf)**
 
 ## Project parts
 
 - **Part 1:** linear trends and regression diagnostics, with a verified base-R runner.
 - **[Part 2](part2/README.md):** Gompertz growth curves, linear trends with AR(1) errors, autocorrelation diagnostics, and exploratory composite likelihood/bootstrap code. The Gompertz and full AR(1) fits have been reproduced; composite-likelihood and bootstrap limitations are documented separately.
+
+- **[Part 3 — final part](part3/README.md):** crop proportions, compositional modeling, and a report on Dirichlet regression and diagnostics. The initial four-parameter script section runs; the full reported Dirichlet analysis is not reproduced by the supplied code.
 
 ## Part 1 research question
 
@@ -25,7 +27,7 @@ There are 49 annual observations for each of three supplied series: fruit, veget
 - Examine time trends, fitted lines, residuals, Q–Q plots, scale-location plots, and leverage diagnostics.
 - Prepare fruit, vegetable, and other-crop proportions for subsequent work.
 
-## Results
+## Part 1 results
 
 The following values were reproduced by running the supplied script on the included data:
 
@@ -48,7 +50,7 @@ The images above are the supplied project figures. Running the analysis also cre
 
 ## Run the analysis
 
-For **Part 1**, only **R and its standard packages** are required; no additional packages need installation. Part 2 has [separate instructions](part2/README.md).
+For **Part 1**, only **R and its standard packages** are required; no additional packages need installation. Parts 2 and 3 have [separate Part 2 instructions](part2/README.md) and [Part 3 instructions](part3/README.md).
 
 Download or clone the repository. Open a terminal in the project folder and run:
 
@@ -90,10 +92,11 @@ The runner preserves the supplied inputs and CSV files. It replaces its own outp
 | `figfruit/`, `figveg/` | Original PNG figures |
 | `REPRODUCIBILITY.md` | Part 1 validation details and file conventions |
 | `part2/` | Part 2 report, pipeline, data, figures, runner, and review notes |
+| `part3/` | Final report, compositional data, original script, figures, limited runner, and review notes |
 
 ## Scope and interpretation
 
-This repository covers **Parts 1 and 2** of the practicum. The linear-regression results above describe Part 1; see the Part 2 folder for its results and limitations. A high R² alone does not establish that model assumptions hold. Annual observations may be serially dependent; the supplied script does not test or model that dependence. The fitted slopes describe time associations, not causal effects. Within-year seasonality cannot be assessed using one observation per year.
+This repository contains **all three parts** of the practicum. The linear-regression results above describe Part 1; see the Part 2 and Part 3 folders for their results and limitations. A high R² alone does not establish that model assumptions hold. Annual observations may be serially dependent; the supplied script does not test or model that dependence. The fitted slopes describe time associations, not causal effects. Within-year seasonality cannot be assessed using one observation per year.
 
 The original data-provider citation is not identified in the supplied report or script. The included text files are the course-project inputs; no independent data-source attribution is claimed here.
 
