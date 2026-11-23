@@ -1,4 +1,6 @@
-# Reproducibility notes
+# Part 1 reproducibility notes
+
+Part 2 has [separate reproduction and review notes](part2/REPRODUCIBILITY.md).
 
 ## What was verified
 

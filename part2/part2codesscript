@@ -1,0 +1,410 @@
+############## functions
+
+gompertz_model <-function(x){
+  nls(
+  acres ~ alpha0 + alpha1 * exp(-exp(beta - gamma * zt)),
+  data = x,
+  start = list(alpha0 = 6.495, alpha1 = 7.91763, beta = 3, gamma = 0.1)
+)
+}
+
+
+##### 2
+
+
+
+
+
+
+
+####### 3
+#for vegetables  and fruits
+loglik_ar1 <- function(params, y, z) {
+  beta0 <- params[1]
+  beta1 <- params[2]
+  phi   <- params[3]
+  sigma2 <- params[4]
+  
+  if (abs(phi) >= 1 || sigma2 <= 0) return(Inf)  # enforce stationarity
+  
+  mu <- beta0 + beta1 * z
+  n <- length(y)
+  
+  e1 <- (y[1] - mu[1])^2 / (sigma2 / (1 - phi^2))
+  rest <- sum((y[-1] - mu[-1] - phi * (y[-n] - mu[-n]))^2)
+  
+  loglik <- -0.5 * log(2 * pi * sigma2 / (1 - phi^2)) - 0.5 * e1 -
+    0.5 * (n - 1) * log(2 * pi * sigma2) - 0.5 * rest / sigma2
+  
+  return(-loglik)  # we minimize
+}
+
+# Starting values from simple linear regression
+#lm_start <- lm(vegetables ~ zt, data = crop_data)
+
+
+
+
+
+
+########## 6
+# Define negative composite log likelihood for AR(1) model
+neglogcl <- function(theta, yv, zt) {
+  beta0 <- theta[1]
+  beta1 <- theta[2]
+  gamma <- theta[3]
+  sigma2 <- theta[4]
+  
+  
+  
+  # Guard against invalid parameter regions
+  if (sigma2 <= 0 || abs(gamma) >= 1) {
+    return(1e10)  # Return a large number if illegal parameter values
+  }
+  
+  # Means at times t-1 and t
+  mu_tminus1 <- beta0 + beta1 * zt[-length(zt)]
+  mu_t <- beta0 + beta1 * zt[-1]
+  
+  # Observed pairs
+  y_tminus1 <- yv[-length(yv)]
+  y_t <- yv[-1]
+  
+  # Compute quadratic form
+  quad <- (y_tminus1 - mu_tminus1)^2 + (y_t - mu_t)^2 - 2 * gamma * (y_tminus1 - mu_tminus1) * (y_t - mu_t)
+  
+  # Determinant of 2x2 covariance matrix: det = sigma2^2 * (1 - gamma^2)
+  log_det <- 2 * log(sigma2) + log(1 - gamma^2)
+  
+  # Composite likelihood value (ignoring constants)
+  cl_value <- -(length(y_t)) * 0.5 * log_det - (1 - gamma^2) * sum(quad) / (2 * sigma2)
+  
+  return(-cl_value)  # negative for minimization
+}
+
+
+
+######### targets
+# Created by use_targets().
+# Follow the comments below to fill in this target script.
+# Then follow the manual to check and run the pipeline:
+#   https://books.ropensci.org/targets/walkthrough.html#inspect-the-pipeline
+
+# Load packages required to define the pipeline:
+library(targets)
+# library(tarchetypes) # Load other packages as needed.
+
+# Set target options:
+tar_option_set(
+  packages = c("tibble","ggplot2","dplyr") # Packages that your targets need for their tasks.
+  
+)
+
+# Run the R scripts in the R/ folder with your custom functions:
+tar_source("functions.R")
+# tar_source("other_functions.R") # Source other scripts as needed.
+
+# Replace the target list below with your own:
+list(
+  tar_target(
+     veg.data,
+     read.csv("vegnew.csv")
+  ),
+  tar_target(fruit.data,read.csv("fruitnew.csv")),
+  tar_target(gompertz.fit,gompertz_model(veg.data)),
+  ######### 2
+  #### 3
+  tar_target(lmveg,lm(acres~zt,data=veg.data)),
+  tar_target(lmfruit,lm(acres~zt,data=fruit.data)),
+  tar_target(init , c(coef(lmveg), 0.5, var(resid(lmveg)))),
+tar_target(init.f,c(coef(lmfruit),0.5,var(resid(lmfruit)))),
+#ar1 veg 
+tar_target(fitar1veg,optim(
+  par = init,
+  fn = loglik_ar1,
+  y = veg.data$acres,
+  z = veg.data$zt,
+  method = "L-BFGS-B",
+  lower = c(-Inf, -Inf, -0.99, 1e-4),
+  upper = c(Inf, Inf, 0.99, Inf))),
+#ar1 fruit
+tar_target(fitar1fruit,optim(
+  par = init.f,
+  fn = loglik_ar1,
+  y = fruit.data$acres,
+  z = fruit.data$zt,
+  method = "L-BFGS-B",
+  lower = c(-Inf, -Inf, -0.99, 1e-4),
+  upper = c(Inf, Inf, 0.99, Inf))),
+##### 6
+tar_target(beta0_start,6.049701),
+tar_target(beta1_start,0.163386),
+tar_target(gamma_start,0),
+tar_target(sigma2_start,0.7),
+tar_target(yv,veg.data$acres),
+tar_target(zt,veg.data$zt),
+tar_target(# Fit composite likelihood model
+  fit_cl, optim(
+    par = c(beta0_start, beta1_start, gamma_start, sigma2_start),
+    fn = neglogcl,
+    yv = yv,
+    zt = zt,
+    method = "BFGS",
+    hessian = TRUE
+  )))
+
+
+
+####### composite likelihood
+# Load the data
+vegdata <- read.table("CAcropdata.txt", header = TRUE)
+vegacres <- veg.1$acres
+zt <- 1:length(vegacres)
+
+# Define the correct pairwise composite likelihood function
+pairwise_loglik <- function(params, y, zt) {
+  beta0 <- params[1]
+  beta1 <- params[2]
+  gamma <- params[3]
+  sigma2 <- params[4]
+  
+  n <- length(y)
+  loglik <- 0
+  
+  varw <- sigma2 / (1 - gamma^2)
+  covw <- gamma * varw
+  
+  for (i in 2:n) {
+    mu_i <- beta0 + beta1 * zt[i]
+    mu_im1 <- beta0 + beta1 * zt[i-1]
+    
+    mean_vec <- c(mu_im1, mu_i)
+    cov_matrix <- matrix(c(varw, covw, covw, varw), nrow = 2)
+    
+    loglik <- loglik + dmvnorm(c(y[i-1], y[i]), mean = mean_vec, sigma = cov_matrix, log = TRUE)
+  }
+  
+  return(-loglik)  # negative for minimization
+}
+
+# Load mvtnorm for dmvnorm
+library(mvtnorm)
+
+# Initial guesses
+beta0_start <- coef(lm(vegacres ~ zt))[1]
+beta1_start <- coef(lm(vegacres ~ zt))[2]
+gamma_start <- 0.5
+sigma2_start <- var(residuals(lm(vegacres ~ zt))) * (1 - gamma_start^2)
+
+# Fit using optim
+fit <- optim(par = c(beta0_start, beta1_start, gamma_start, sigma2_start),
+             fn = pairwise_loglik, y = vegacres, zt = zt,
+             method = "BFGS", control = list(maxit = 10000))
+
+# Store estimates
+pairwise_estimates <- fit$par
+
+names(pairwise_estimates) <- c("beta0", "beta1", "gamma", "sigma2")
+pairwise_estimates
+
+# Parametric bootstrap
+set.seed(123)
+B <- 1000
+boot_estimates <- matrix(NA, nrow = B, ncol = 4)
+colnames(boot_estimates) <- c("beta0", "beta1", "gamma", "sigma2")
+
+for (b in 1:B) {
+  # Simulate new W(t)
+  n <- length(zt)
+  W <- numeric(n)
+  W[1] <- rnorm(1, mean = 0, sd = sqrt(pairwise_estimates["sigma2"] / (1 - pairwise_estimates["gamma"]^2)))
+  
+  for (t in 2:n) {
+    W[t] <- pairwise_estimates["gamma"] * W[t-1] + rnorm(1, mean = 0, sd = sqrt(pairwise_estimates["sigma2"]))
+  }
+  
+  # Create Y(t)
+  Ysim <- pairwise_estimates["beta0"] + pairwise_estimates["beta1"] * zt + W
+  
+  # Refit
+  boot_fit <- try(optim(par = pairwise_estimates,
+                        fn = pairwise_loglik, y = Ysim, zt = zt,
+                        method = "BFGS", control = list(maxit = 10000)), silent = TRUE)
+  
+  if (!inherits(boot_fit, "try-error")) {
+    boot_estimates[b, ] <- boot_fit$par
+  }
+}
+
+# Remove NAs
+boot_estimates <- boot_estimates[complete.cases(boot_estimates), ]
+
+# Basic bootstrap intervals
+original_estimates <- pairwise_estimates
+
+
+
+######
+# Basic bootstrap intervals
+basic_intervals <- function(original, bootstrap) {
+  q_low <- quantile(bootstrap - original, 0.975, na.rm = TRUE)
+  q_high <- quantile(bootstrap - original, 0.025, na.rm = TRUE)
+  c(lower = original - q_low, upper = original - q_high)
+}
+
+# Percentile intervals
+percentile_intervals <- function(bootstrap) {
+  c(lower = quantile(bootstrap, 0.025, na.rm = TRUE), 
+    upper = quantile(bootstrap, 0.975, na.rm = TRUE))
+}
+
+# Build all intervals
+intervals <- list()
+
+for (param in c("beta0", "beta1", "gamma", "sigma2")) {
+  idx <- match(param, colnames(boot_estimates))
+  original <- fit$par[idx]
+  bootstrap_vals <- boot_estimates[, idx]
+  
+  intervals[[param]] <- list(
+    basic = basic_intervals(original, bootstrap_vals),
+    percentile = percentile_intervals(bootstrap_vals)
+  )
+}
+
+# Display
+intervals
+
+
+########## other results
+##
+tar_read(veg.data)
+
+
+##
+summary(tar_read(gompertz.fit))
+confint(tar_read(gompertz.fit),level = 0.95)
+##ci for sigma^2
+lower <- ((45) * 0.4876229) / qchisq(1 - 0.05/2, df = 45)
+upper <- ((45) * 0.4876229) / qchisq(0.05/2, df = 45)
+c(lower, upper)
+
+
+
+# Assume gompertz_model is your fitted nls model
+gompertz_model <- tar_read(gompertz.fit)
+
+
+# Plot the original data first
+plot(vegnew$zt, vegnew$acres, type = "l",
+     xlab = "Year(1=1960)",
+     ylab = "Vegetable Acres (x100,000)",
+     main = "Vegetable Acres with Gompertz Fit")
+
+# Add Gompertz fit
+x_vals <- seq(min(vegnew$zt), max(vegnew$zt), length.out = 100)
+y_vals <- predict(gompertz_model, newdata = data.frame(zt = x_vals))
+lines(x_vals, y_vals, col = "blue", lwd = 2)
+
+
+
+##### 2
+library(gridExtra)
+
+par(mfrow=c(1,1))
+plot(vegnew$zt, residuals(gompertz_model), type = "p",
+     main = "Residuals from Gompertz Model",
+     xlab = "Year(1=1960)", ylab = "Residuals")->gmplot
+abline(h = 0, col = "red")
+
+lm_model <- lm(acres ~ zt, data = vegnew)
+plot(vegnew$zt, residuals(lm_model), type = "p",
+     main = "Residuals from Linear Model",
+     xlab = "Year(1=1960)", ylab = "Residuals")->lmplot
+abline(h = 0, col = "red")
+
+grid.arrange(gmplot,lmplot)
+
+# Linear model residual variance
+var_lin <- sum(resid(lm_model)^2) / df.residual(lm_model)
+
+# Gompertz model residual variance
+var_gomp <- sum(resid(gompertz_model)^2) / df.residual(gompertz_model)
+
+cat("Linear Model σ² estimate:", round(var_lin, 4), "\n")
+cat("Gompertz Model σ² estimate:", round(var_gomp, 4), "\n")
+
+
+
+###### 3
+
+fruit.1<-tar_read(fruit.data)
+veg.1<-tar_read(veg.data)
+
+# Extract estimates for ar1 veg
+est_veg <- tar_read(fitar1veg)$par
+logLik_veg <- tar_read(fitar1veg)$value
+
+names(est_veg) <- c("beta0", "beta1", "gamma", "sigma2")
+print(est_veg)
+cat("Log-likelihood (vegetables):", logLik_veg, "\n")
+
+
+# Extract estimates for ar1 vfruit
+est_fruit <- tar_read(fitar1fruit)$par
+logLik_fruit <- tar_read(fitar1fruit)$value
+
+names(est_fruit) <- c("beta0", "beta1", "gamma", "sigma2")
+print(est_fruit)
+cat("Log-likelihood (fruit):", logLik_fruit, "\n")
+
+#### scattterplots
+#Vegetables
+plot(veg.1$zt, veg.1$acres,
+     xlab = "Year(1=1960)", ylab = "Vegetable Acres(x100,000)", pch = 19)
+lines(veg.1$zt, est_veg["beta0"] + est_veg["beta1"] * veg.1$zt,
+      col = "blue", lwd = 2)
+
+# Fruits
+plot(fruit.1$zt, fruit.1$acres,
+     xlab = "Year(1=1960)", ylab = "Fruit Acres (x100,000) ", pch = 19)
+lines(fruit.1$zt, est_fruit["beta0"] + est_fruit["beta1"] * fruit.1$zt,
+      col = "blue", lwd = 2)
+
+
+
+
+########## 5
+# Residuals from each model
+resid_simple <- residuals(tar_read(lmveg))
+resid_gompertz <- residuals(tar_read(gompertz.fit))
+resid_ar1 <- residuals(tar_read(fitar1veg))
+
+
+#### residuals for ar1 error structure
+fitted_ar1 <- 6.3185647 + 0.1513498 * veg.1$zt
+epsilon_hat <- veg.1$acres - fitted_ar1
+epsilon_hat_adj <- numeric(length(veg.1$acres))
+epsilon_hat_adj[1] <- epsilon_hat[1] # no adjustment for first one, residuals
+
+for (t in 2:length(veg.1$acres)) {
+  epsilon_hat_adj[t] <- epsilon_hat[t] - 0.6556477 * epsilon_hat[t-1]
+}
+
+
+
+# Plot ACF
+par(mfrow=c(1,3))
+acf(resid_simple, main = "Simple Linear Regression")
+acf(resid_gompertz, main = "Gompertz Fit")
+ acf(epsilon_hat_adj, main ="AR(1) error structure")
+
+
+
+######## 6 composite likelihood
+ tar_read(fit_cl)$par #parameters
+ 
+
+
+
+
